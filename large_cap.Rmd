@@ -1,0 +1,277 @@
+---
+title: "ANIGN"
+author: "Matthew Zebert"
+date: "November 16, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+pacman::p_load(
+ggplot2,
+knitr,
+arm,
+data.table,
+foreign,
+gridExtra,
+car,
+stringr,
+rstan,
+rstanarm,
+zoo
+)
+```
+
+
+Step 1: Collect stock data of market segment segment
+
+```{r}
+
+library(quantmod)
+
+#Small Cap
+# #Example Pulls
+# getSymbols(c("GOOGL","MSFT","AMZN", "FB", "BKS", "MOSY"))
+# 
+# chartSeries(GOOGL, subset='last 3 months'); addBBands()
+# 
+#Large Cap Tech data pull
+
+getSymbols("AAPL",from = as.Date("2017-04-01"), to = as.Date("2017-11-01"))
+AAPL <-  data.frame(date=index(AAPL), coredata(AAPL))
+colnames(AAPL) <- c("date","open","high", "low", "close", "volume", "adjusted")
+
+getSymbols("GOOGL",from = as.Date("2017-04-01"), to = as.Date("2017-11-01"))
+#creating date column
+GOOGL <-  data.frame(date=index(GOOGL), coredata(GOOGL))
+#rename for stacking later
+colnames(GOOGL) <- c("date","open","high", "low", "close", "volume", "adjusted")
+
+
+getSymbols("MSFT",from = as.Date("2017-04-01"), to = as.Date("2017-11-01"))
+MSFT <-  data.frame(date=index(MSFT), coredata(MSFT))
+colnames(MSFT) <- c("date","open","high", "low", "close", "volume", "adjusted")
+
+getSymbols("AMZN",from = as.Date("2017-04-01"), to = as.Date("2017-11-01"))
+AMZN <-  data.frame(date=index(AMZN), coredata(AMZN))
+colnames(AMZN) <- c("date","open","high", "low", "close", "volume", "adjusted")
+
+getSymbols("FB",from = as.Date("2017-04-01"), to = as.Date("2017-11-01"))
+FB <-  data.frame(date=index(FB), coredata(FB))
+colnames(FB) <- c("date","open","high", "low", "close", "volume", "adjusted")
+
+# reference -> getSymbols("^GSPC", env = sp500, src = "yahoo", from = as.Date("1960-01-04"), to = as.Date("2009-01-01"))
+
+```
+
+
+Step 2: Collect daily counts of google search of ticker for each stock
+
+```{r}
+
+# install.packages("searchConsoleR")
+# install.packages("googleAuthR")
+
+library(gtrendsR) # looks like 250 obervations is the max (04 - 12)
+AAPL_G <-gtrends("AAPL", time = "2017-04-01 2017-12-01")$interest_over_time
+
+
+GOOGL_G <-gtrends("GOOGL", time = "2017-04-01 2017-12-01")$interest_over_time
+MSFT_G <-gtrends("MSFT", time = "2017-04-01 2017-12-01")$interest_over_time
+AMZN_G <-gtrends("AMZN", time = "2017-04-01 2017-12-01")$interest_over_time
+FB_G <-gtrends("FB", time = "2017-04-01 2017-12-01")$interest_over_time
+
+
+#query across all stock tickers at once
+
+```
+
+Step2.5: Merge Data frames:
+```{r}
+AAPL$date <- as.Date (AAPL$date, format= "%y/%m/%d")
+AAPL_G$date <- as.Date (AAPL_G$date, format= "%y/%m/%d")
+AAPLm <-  merge(AAPL, AAPL_G, by="date", all.x=TRUE)
+AAPLm$hits.c <- AAPLm$hits - mean(AAPLm$hits)
+AAPLm$volume.c <- AAPLm$volume - mean(AAPLm$volume)
+
+GOOGL$date <- as.Date (GOOGL$date, format= "%y/%m/%d")
+GOOGL_G$date <- as.Date (GOOGL_G$date, format= "%y/%m/%d")
+GOOGLm <-  merge(GOOGL, GOOGL_G, by="date", all.x=TRUE)
+GOOGLm$hits.c <- GOOGLm$hits - mean(GOOGLm$hits)
+GOOGLm$volume.c <- GOOGLm$volume - mean(GOOGLm$volume)
+
+MSFT$date <- as.Date (MSFT$date, format= "%y/%m/%d")
+MSFT_G$date <- as.Date (MSFT_G$date, format= "%y/%m/%d")
+MSFTm <-  merge(MSFT, MSFT_G, by="date", all.x=TRUE)
+MSFTm$hits.c <- MSFTm$hits - mean(MSFTm$hits)
+MSFTm$volume.c <- MSFTm$volume - mean(MSFTm$volume)
+
+
+AMZN$date <- as.Date (AMZN$date, format= "%y/%m/%d")
+AMZN_G$date <- as.Date (AMZN_G$date, format= "%y/%m/%d")
+AMZNm <-  merge(AMZN, AMZN_G, by="date", all.x=TRUE)
+AMZNm$hits.c <- AMZNm$hits - mean(AMZNm$hits)
+AMZNm$volume.c <- AMZNm$volume - mean(AMZNm$volume)
+
+FB$date <- as.Date (FB$date, format= "%y/%m/%d")
+FB_G$date <- as.Date (FB_G$date, format= "%y/%m/%d")
+FBm <-  merge(FB, FB_G, by="date", all.x=TRUE)
+FBm$hits.c <- FBm$hits - mean(FBm$hits)
+FBm$volume.c <- FBm$volume - mean(FBm$volume)
+
+
+
+
+
+```
+
+
+Step 3:EDA - plotting a scaled version of the google trend hits on top of the stock price chart
+
+```{r}
+#EDA of Google Trends
+# summary(AAPL_G)
+# hist(AAPL_G$hits)
+# plot(AAPL_G$date, AAPL_G$hits)
+# 
+# #EDA of Price
+# plot(AAPL$date,AAPL$AAPL.Close)
+
+
+
+#hits overlayed on price
+
+
+
+p <- ggplot(AAPLm, aes(x = date))
+  p <- p + geom_point(aes(y = close))
+    # adding the hits data, transformed to match roughly the range of the price
+  p <- p + geom_line(aes(y = log(hits)*45, color = "red"))
+  #p <- p + scale_y_continuous(sec.axis = sec_axis(~.*.5,name = "Google Hits"))
+p
+
+p <- ggplot(GOOGLm, aes(x = date))
+  p <- p + geom_point(aes(y = close))
+    # adding the hits data, transformed to match roughly the range of the price
+  p <- p + geom_line(aes(y = hits*12, color = "red"))
+  #p <- p + scale_y_continuous(sec.axis = sec_axis(~.*.5,name = "Google Hits"))
+p
+
+p <- ggplot(MSFTm, aes(x = date))
+  p <- p + geom_point(aes(y = close))
+    # adding the hits data, transformed to match roughly the range of the price
+  p <- p + geom_line(aes(y = hits*2, color = "red"))
+  #p <- p + scale_y_continuous(sec.axis = sec_axis(~.*.5,name = "Google Hits"))
+p
+
+p <- ggplot(AMZNm, aes(x = date))
+  p <- p + geom_point(aes(y = close))
+    # adding the hits data, transformed to match roughly the range of the price
+  p <- p + geom_line(aes(y = hits*15, color = "red"))
+  #p <- p + scale_y_continuous(sec.axis = sec_axis(~.*.5,name = "Google Hits"))
+p
+
+p <- ggplot(FBm, aes(x = date))
+  p <- p + geom_point(aes(y = close))
+    # adding the hits data, transformed to match roughly the range of the price
+  p <- p + geom_line(aes(y = hits*2, color = "red"))
+  #p <- p + scale_y_continuous(sec.axis = sec_axis(~.*.5,name = "Google Hits"))
+p
+
+```
+Most of these plots have a difficulty of showing the hits accurately. This is due to the process google uses. Instead of giving their actual counts of the searched text. They give a distribution between 0 and 100 of how popular the searched text is, compared to the other days in the range of time you specify. I then scaled each "hits" varliable by any number that would make the hits overlay close to the stock price (and therefore didnt include a second axis of y values because they are meaningless in this plot)
+
+
+Step 4: Create models
+End all goal y ~ sentiment + date + volume + (1|Company) + (1|year)
+
+```{r}
+#Combine into one data set
+library(arm)
+library(gdata)
+
+
+m1 <- lm(close ~ date + hits + log(volume), data = GOOGLm)
+display(m1)
+
+#large_cap <- rbind(GOOGLm, AMZNm, FBm)
+large_cap <- combine(AAPLm, GOOGLm, MSFTm, AMZNm, FBm)
+m2 <- lmer(close ~ date + hits + log(volume)+ (1|source), data = large_cap)
+display(m2)
+summary(m2)
+# Reference for similiar example:
+#                Lab: Logistic Regression, LDA, QDA, and KNN . . . . . . 4.6
+
+
+
+
+plot(m2)
+binnedplot(predict(m2), resid(m2), main="Binned residual plot")
+ 
+
+
+```
+The binned residuals show that this model is not great at capturing the variabllity of stock data. The summery shows that most of the coefficients are not significant, but things like volume and date are. 
+
+
+Step 5: GLM attempt - setting up % change, 5 days of lag % changes, and daily direction (up or down)
+
+```{r}
+
+head(AAPLm)
+
+AAPLm$pchang <- 100*(AAPLm$open - AAPLm$close)/AAPLm$open
+AAPLm$lag1 <-  shift(AAPLm$pchang,1,type = "lead"); #AAPLm$lag1[length(AAPLm$lag1)] <- 0
+AAPLm$lag2 <-  shift(AAPLm$pchang,2,type = "lead"); #AAPLm$lag2[length(AAPLm$lag1)-1] <- 0
+AAPLm$lag3 <-  shift(AAPLm$pchang,3,type = "lead"); #AAPLm$lag3[length(AAPLm$lag1)] <- 0
+AAPLm$lag4 <-  shift(AAPLm$pchang,4,type = "lead"); #AAPLm$lag4[length(AAPLm$lag1)] <- 0
+AAPLm$lag5 <-  shift(AAPLm$pchang,5,type = "lead"); #AAPLm$lag5[length(AAPLm$lag1)] <- 0
+AAPLm$direction <- AAPLm$pchang/abs(AAPLm$pchang) #if(AAPLm$pchang > 0){AAPLm$direction = 1}
+AAPLm$direction <- factor(AAPLm$direction, levels = c(-1,1), 
+       labels = c("down", "up"))#replace(AAPLm$direction,from= as.text(-1),to= "down")
+cor(na.omit(AAPLm[15:20]))
+```
+From ISLR 
+  "The cor() function produces a matrix that contains all of the pairwise correlations among the predictors in a data set.  As one would expect, the correlations between the lag variables and today’s returns are close to zero. In other words, there appears to be little correlation between today’s returns and previous days’ returns"
+  
+  GLM with outcome variable being direction (will the price go up or down)
+
+```{r}
+glm.fit <-  glm(direction∼lag1+ lag2 + lag3 + lag4 + lag5 + volume, data=AAPLm ,family=binomial )
+display(glm.fit)
+summary(glm.fit)
+glm.fit2 <-  glm(direction∼date + hits + lag1+ lag2 + lag3 + lag4 + lag5 + volume, data=AAPLm ,family=binomial )
+display(glm.fit2)
+summary(glm.fit2)
+```
+From ISLR on predict function:
+ "The predict() function can be used to predict the probability that the
+market will go up, given values of the predictors. The type="response"
+option tells R to output probabilities of the form P(Y = 1|X), as opposed
+to other information such as the logit. If no data set is supplied to the
+predict() function, then the probabilities are computed for the training
+data that was used to fit the logistic regression model. Here we have printed
+only the first ten probabilities. We know that these values correspond to
+the probability of the market going up, rather than down, because the
+contrasts() function indicates that R has created a dummy variable with
+a 1 for Up"
+
+```{r}
+# glm.probs=predict (glm.fit ,type="response")
+# glm.probs [1:10]
+# glm.pred=rep("Down" ,1250)
+# glm.pred[glm.probs >.5]=" Up"
+# 
+# table(glm.pred ,AAPLm$direction )
+```
+
+## Recap
+
+  Overall, its clear the multilevel model for both small cap and large cap was not delivering very significant results. The binned residual plot was clearly showing the model was not great at encompassing the variation of the data. I beleive this is due to a series or issues. Firstly, the nature of how Google provides it's search data does not allow us to have descrete counts of stock tickers. Therefore it becomes a difficult process to accuratly use it as a predictor. Going forward, the plan would be to try to pull all of the stocks in relation to each other through the google search api. 
+  Another issue is the lack of sentiment predictors. While google may provide one source, twitter, yahoo, web forums and other options exist. My plan is to incorporate these more over time.
+  
+  Lastly, I attempted to recreate the ISLR Lab example with my generated data. My results are similiar to the book in terms of predictive percentages. This creates the potential of adding more predictors and continueing with this project next semester.
+  
+  I'd like to thank you for the opportunity to work on this type of project for my final. I know this was not a tradition application of a multilevel model, but I have learned a tremendous amount about how to work with API's, stock market modeling, mutlilevel modeling, glms, and more.
+  
+  
